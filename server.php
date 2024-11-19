@@ -72,12 +72,23 @@ function ifUserExist($email){
 
 function ifLessonExists($order,$unit_id) {
 
-	$resultado = mysqli_query($GLOBALS['conn'], "SELECT * FROM lessons WHERE lesson_order = $order and unit_id = $unit_id");
+	$resultado = mysqli_query($GLOBALS['conn'], "SELECT * FROM lessons WHERE lesson_order = $order and unit_id = $unit_id AND isDeleted=0");
     if (mysqli_num_rows($resultado) > 0) {
        return true;
     } 	   
 	return false;
 }
+
+
+function ifMarkExists($user_id,$exam_id) {
+
+	$resultado = mysqli_query($GLOBALS['conn'], "SELECT * FROM exam_scores WHERE user_id = $user_id and exam_id = $exam_id");
+    if (mysqli_num_rows($resultado) > 0) {
+       return true;
+    } 	   
+	return false;
+}
+
 
 function ifFileExists($name,$lesson_id) {
 
@@ -132,25 +143,33 @@ function returnPersonName($person_id) {
 
 
 function returnUnitName($id) {
-	$obj = array();
-    $resultado = mysqli_query($GLOBALS['conn'], "SELECT name FROM units WHERE id = $id");
-    $row = mysqli_fetch_assoc($resultado);
-    
-	return $row;	
+    global $conn; // Asegúrate de que $conn está declarado como global
+    $resultado = mysqli_query($conn, "SELECT name FROM units WHERE id = $id");
+    if ($resultado) {
+        $row = mysqli_fetch_assoc($resultado);
+        return $row['name']; // Devuelve solo el nombre de la unidad
+    } else {
+        return null; // O manejar el error adecuadamente
+    }
 }
 
+
+
 function returnUnitOrder($id) {
-	$obj = array();
-    $resultado = mysqli_query($GLOBALS['conn'], "SELECT unit_order FROM units WHERE id = $id");
-    $row = mysqli_fetch_assoc($resultado);
-    
-	return $row;	
+    global $conn; // Asegúrate de que $conn está declarado como global
+    $resultado = mysqli_query($conn, "SELECT unit_order FROM units WHERE id = $id");
+    if ($resultado) {
+        $row = mysqli_fetch_assoc($resultado);
+        return $row['unit_order']; // Devuelve solo el valor de unit_order
+    } else {
+        return null; // O manejar el error adecuadamente
+    }
 }
 
 function returnLessons($unit_id)
 {
     $obj = array();
-    $resultado = mysqli_query($GLOBALS['conn'], "SELECT title,id,lesson_order FROM lessons WHERE unit_id = '$unit_id'");
+    $resultado = mysqli_query($GLOBALS['conn'], "SELECT title,id,lesson_order FROM lessons WHERE unit_id = '$unit_id' AND isDeleted=0");
     if ($resultado && mysqli_num_rows($resultado) > 0) {
         while ($row = mysqli_fetch_assoc($resultado)) {
             $obj[] = array(
@@ -178,6 +197,33 @@ function returnExams($unit_id)
     }
     return $obj;
 }
+
+function returnSingleExam($exam_id)
+{
+    $obj = array();
+    $resultado = mysqli_query($GLOBALS['conn'], "SELECT title,exam_order FROM exams WHERE id =$exam_id ORDER BY exam_order ASC");
+    if ($resultado && mysqli_num_rows($resultado) > 0) {
+        while ($row = mysqli_fetch_assoc($resultado)) {
+            $obj = array(
+                'title' => $row['title'],
+                'exam_order' => $row['exam_order']
+            );
+        }
+    }
+    return $obj;
+}
+
+function returnExamUnit($exam_id) {
+    global $conn; // Asegúrate de que $conn está declarado como global
+    $resultado = mysqli_query($conn, "SELECT unit_id FROM exams WHERE id = $exam_id");
+    if ($resultado) {
+        $row = mysqli_fetch_assoc($resultado);
+        return $row['unit_id']; // Devuelve el unit_id
+    } else {
+        return null; // O manejar el error adecuadamente
+    }
+}
+
 
 
 function returnExamQuestions($exam_id)
@@ -308,6 +354,59 @@ if ($method == "POST") {
 			echo json_encode($response);
 		}
 
+        if(isset($data['updateSingleFieldLesson'])){ /* Actualiza segun un campo con su valor y  la tabla requerida*/
+
+			$campo = mysqli_real_escape_string($conn, $data['campo']);
+			$valor = mysqli_real_escape_string($conn, strtolower($data['valor']));
+			$tabla = mysqli_real_escape_string($conn, $data['tabla']);
+			$whereCondition =	 mysqli_real_escape_string($conn, $data['whereCondition']);
+
+			
+            $query = "UPDATE $tabla SET $campo = $valor WHERE $whereCondition";
+            $result = mysqli_query($conn, $query);
+
+                // Historial
+                $historyName= returnPersonName($data['history']['person_id']);
+                $texto = returnPersonName($data['history']['person_id'])." ha desabilitado una Lección";
+                $historyResponse = addToHistory($data['history']['user'], $texto);
+                //Fin Historial
+            
+            
+            if (!$result) {
+                // Error en la consulta
+                throw new Exception("Error en la consulta SQL: " . mysqli_error($conn));
+            }
+			
+			$response = array("message" => "ok");
+			echo json_encode($response);
+		}
+
+        if(isset($data['updateSingleFieldExam'])){ /* Actualiza segun un campo con su valor y  la tabla requerida*/
+
+			$campo = mysqli_real_escape_string($conn, $data['campo']);
+			$valor = mysqli_real_escape_string($conn, strtolower($data['valor']));
+			$tabla = mysqli_real_escape_string($conn, $data['tabla']);
+			$whereCondition =	 mysqli_real_escape_string($conn, $data['whereCondition']);
+
+			
+            $query = "UPDATE $tabla SET $campo = $valor WHERE $whereCondition";
+            $result = mysqli_query($conn, $query);
+
+                // Historial
+                $historyName= returnPersonName($data['history']['person_id']);
+                $texto = returnPersonName($data['history']['person_id'])." ha desabilitado un Examen";
+                $historyResponse = addToHistory($data['history']['user'], $texto);
+                //Fin Historial
+            
+            
+            if (!$result) {
+                // Error en la consulta
+                throw new Exception("Error en la consulta SQL: " . mysqli_error($conn));
+            }
+			
+			$response = array("message" => "ok");
+			echo json_encode($response);
+		}
 
         if(isset($data['update'])) {
             // Limpia el buffer de salida antes de cualquier echo
@@ -323,6 +422,109 @@ if ($method == "POST") {
                 // Error en la consulta
                 throw new Exception("Error en la consulta SQL: " . mysqli_error($conn));
             }
+        
+            // Solo enviamos esta respuesta al final
+            $response = array("message" => "ok");
+            echo json_encode($response);
+        
+            // Asegúrate de terminar el script correctamente
+            exit();
+        }
+       
+        if(isset($data['delete'])) {
+            // Limpia el buffer de salida antes de cualquier echo
+            ob_clean();
+        
+            $tabla = mysqli_real_escape_string($conn, $data['tabla']);
+            $query = "DELETE FROM $tabla  WHERE id=".$data['delete'];
+            $result = mysqli_query($conn, $query);
+        
+            if (!$result) {
+                // Error en la consulta
+                throw new Exception("Error en la consulta SQL: " . mysqli_error($conn));
+            }
+        
+            // Solo enviamos esta respuesta al final
+            $response = array("message" => "ok");
+            echo json_encode($response);
+        
+            // Asegúrate de terminar el script correctamente
+            exit();
+        }
+
+
+
+        if(isset($data['updateBlockUser'])) {
+            // Limpia el buffer de salida antes de cualquier echo
+            ob_clean();
+        
+            $campo = mysqli_real_escape_string($conn, $data['campo']);
+            $valor = mysqli_real_escape_string($conn, strtolower($data['valor']));
+            $tabla = mysqli_real_escape_string($conn, $data['tabla']);
+            $query = "UPDATE $tabla SET $campo = $valor WHERE user_id=".$data['updateBlockUser'];
+            $result = mysqli_query($conn, $query);
+        
+            if (!$result) {
+                // Error en la consulta
+                throw new Exception("Error en la consulta SQL: " . mysqli_error($conn));
+            }
+
+                // Historial
+                $historyName= returnPersonName($data['history']['person_id']);
+                $texto = returnPersonName($data['history']['person_id'])." ha bloqueado a un usuario";
+                $historyResponse = addToHistory($data['history']['user'], $texto);
+                //Fin Historial
+        
+            // Solo enviamos esta respuesta al final
+            $response = array("message" => "ok");
+            echo json_encode($response);
+        
+            // Asegúrate de terminar el script correctamente
+            exit();
+        }
+       
+        if(isset($data['delete'])) {
+            // Limpia el buffer de salida antes de cualquier echo
+            ob_clean();
+        
+            $tabla = mysqli_real_escape_string($conn, $data['tabla']);
+            $query = "DELETE FROM $tabla  WHERE id=".$data['delete'];
+            $result = mysqli_query($conn, $query);
+        
+            if (!$result) {
+                // Error en la consulta
+                throw new Exception("Error en la consulta SQL: " . mysqli_error($conn));
+            }
+        
+            // Solo enviamos esta respuesta al final
+            $response = array("message" => "ok");
+            echo json_encode($response);
+        
+            // Asegúrate de terminar el script correctamente
+            exit();
+        }
+
+
+        if(isset($data['updateEraseUser'])) {
+            // Limpia el buffer de salida antes de cualquier echo
+            ob_clean();
+        
+            $campo = mysqli_real_escape_string($conn, $data['campo']);
+            $valor = mysqli_real_escape_string($conn, strtolower($data['valor']));
+            $tabla = mysqli_real_escape_string($conn, $data['tabla']);
+            $query = "UPDATE $tabla SET $campo = $valor WHERE user_id=".$data['updateEraseUser'];
+            $result = mysqli_query($conn, $query);
+        
+            if (!$result) {
+                // Error en la consulta
+                throw new Exception("Error en la consulta SQL: " . mysqli_error($conn));
+            }
+
+                // Historial
+                $historyName= returnPersonName($data['history']['person_id']);
+                $texto = returnPersonName($data['history']['person_id'])." ha borrado a un usuario";
+                $historyResponse = addToHistory($data['history']['user'], $texto);
+                //Fin Historial
         
             // Solo enviamos esta respuesta al final
             $response = array("message" => "ok");
@@ -476,35 +678,43 @@ if ($method == "POST") {
             echo json_encode($response);
     }
 
-        if (isset($data['addLesson'])) {
-
+    if (isset($data['addLesson'])) {
         $message = '';
         $icon = '';
+        $lesson_id = null;
+    
+        $title = mysqli_real_escape_string($conn, strtolower($data['lesson']['title']));
+        $unit_id = mysqli_real_escape_string($conn, strtolower($data['lesson']['unitId']));
+        $lesson_order = mysqli_real_escape_string($conn, strtolower($data['lesson']['lesson_order']));
+        $summary = mysqli_real_escape_string($conn, strtolower($data['lesson']['summary']));
+        $url = mysqli_real_escape_string($conn, strtolower($data['lesson']['url']));
+    
+        if (ifLessonExists($lesson_order, $unit_id) == true) {
+            $message = 'Cuidado: Esta lección ya tiene un numero asignado';
+            $icon = 'warning';
+        } else {
+            $query = "INSERT INTO lessons (title, unit_id, lesson_order, summary, url) VALUES ('$title', '$unit_id', $lesson_order, '$summary', '$url')";
+            $result = mysqli_query($conn, $query);
 
-            // Escapa los valores para evitar inyección de SQL
-            $title = mysqli_real_escape_string($conn, strtolower($data['lesson']['title']));
-            $unit_id =  mysqli_real_escape_string($conn, strtolower($data['lesson']['unitId']));
-            $lesson_order =  mysqli_real_escape_string($conn, strtolower($data['lesson']['lesson_order']));
-            $summary = mysqli_real_escape_string($conn, strtolower($data['lesson']['summary']));
-            $url =  mysqli_real_escape_string($conn, strtolower($data['lesson']['url']));
-
-            if (ifLessonExists($lesson_order,$unit_id) == true) {
-                $message ='Cuidado: Esta lección ya tiene un numero asignado ';
-                $icon = 'warning';					
-            } else{
-                $query = "INSERT INTO lessons (title,unit_id,lesson_order,summary,url) VALUES ('$title','$unit_id',$lesson_order,'$summary','$url')";
-                $result = mysqli_query($conn, $query);
-
-                if (!$result) {
-                    throw new Exception("Error en la consulta SQL: " . mysqli_error($conn));
-                    $message = 'Error';
-                }
-                $message ='Leccion Añadida con Exito';
+                // Historial
+                $historyName= returnPersonName($data['history']['person_id']);
+                $texto = returnPersonName($data['history']['person_id'])." ha creado una Lección";
+                $historyResponse = addToHistory($data['history']['user'], $texto);
+                //Fin Historial
+    
+            if (!$result) {
+                throw new Exception("Error en la consulta SQL: " . mysqli_error($conn));
+                $message = 'Error';
+            } else {
+                $lesson_id = mysqli_insert_id($conn); // Obtener el ID de la última lección añadida
+                $message = 'Lección Añadida con Éxito';
                 $icon = 'success';
             }
-            $response = array('message' => $message,'icon'=>$icon);
-            echo json_encode($response);
         }
+        $response = array('message' => $message, 'icon' => $icon, 'lesson_id' => $lesson_id);
+        echo json_encode($response);
+    }
+    
 
         if (isset($data['editUnit'])) {
             $subjectExist = false;
@@ -562,6 +772,12 @@ if ($method == "POST") {
                 $query = "UPDATE lessons SET title='$title',unit_id=$unit_id, lesson_order=$lesson_order,summary='$summary',url='$url' WHERE id=$id";
                 $result = mysqli_query($conn, $query);
 
+                // Historial
+                $historyName= returnPersonName($data['history']['person_id']);
+                $texto = returnPersonName($data['history']['person_id'])." ha editado una Lección";
+                $historyResponse = addToHistory($data['history']['user'], $texto);
+                //Fin Historial
+
                 if (!$result) {
                     throw new Exception("Error en la consulta SQL: " . mysqli_error($conn));
                     $message = 'Error';
@@ -571,6 +787,7 @@ if ($method == "POST") {
             
             $response = array('message' => $message,'icon'=>$icon);
             echo json_encode($response);
+            
     }
 
 
@@ -628,10 +845,19 @@ if (isset($_POST['addFile']) && $_POST['addFile'] === 'true') {
     $lesson_id = $_POST['lesson_id'];
     $uploadDirectory = 'guides/';
     foreach ($_FILES['files']['name'] as $key => $name) {
+        $fileExtension = pathinfo($name, PATHINFO_EXTENSION);
+        $allowedExtensions = ['pdf', 'docx'];
+
+        if (!in_array($fileExtension, $allowedExtensions)) {
+            echo json_encode(['status' => 'error', 'file' => $name, 'message' => 'Es un tipo invalido. Los unicos tipos validos son PDF Y WORD']);
+            continue; // Saltar al siguiente archivo si la extensión no es válida
+        }
+
         if (ifFileExists($name, $lesson_id)) {
-            echo json_encode(['status' => 'exists', 'file' => $name, 'message' => 'File already exists']);
+            echo json_encode(['status' => 'exists', 'file' => $name, 'message' => 'El archivo ya existe.']);
             exit; // Detenemos el script si el archivo existe
         }
+
         $tmpName = $_FILES['files']['tmp_name'][$key];
         $filePath = $uploadDirectory . basename($name);
 
@@ -654,6 +880,50 @@ if (isset($_POST['addFile']) && $_POST['addFile'] === 'true') {
         }
     }
 }
+
+
+if (isset($_POST['addVideo']) && $_POST['addVideo'] === 'true') {
+    $lesson_id = $_POST['lesson_id'];
+    $uploadDirectory = 'videos/';
+    $response = [];
+    $key = 0; // Esperamos solo un archivo
+
+    $name = $_FILES['files']['name'][$key];
+    $fileExtension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+    if ($fileExtension !== 'mp4') {
+        $response[] = ['status' => 'error', 'file' => $name, 'message' => 'Only .mp4 files are allowed'];
+        echo json_encode($response);
+        exit;
+    }
+
+    if (ifFileExists($name, $lesson_id)) {
+        $response[] = ['status' => 'exists', 'file' => $name, 'message' => 'File already exists'];
+        echo json_encode($response);
+        exit;
+    }
+
+    $tmpName = $_FILES['files']['tmp_name'][$key];
+    $filePath = $uploadDirectory . basename($name);
+    error_log("Intentando mover archivo: $tmpName a $filePath");
+
+    if (move_uploaded_file($tmpName, $filePath)) {
+        chmod($filePath, 0777);
+        $query = "INSERT INTO videos (lesson_id, file, name) VALUES ('$lesson_id', '$filePath', '$name')";
+        $result = mysqli_query($conn, $query);
+        if ($result) {
+            $response[] = ['status' => 'success', 'file' => $name, 'message' => 'File uploaded successfully'];
+        } else {
+            error_log("Error al insertar en la base de datos: " . mysqli_error($conn));
+            $response[] = ['status' => 'error', 'message' => 'DB insert failed'];
+        }
+    } else {
+        error_log("Error al mover el archivo.");
+        $response[] = ['status' => 'error', 'message' => 'File move failed'];
+    }
+    echo json_encode($response);
+}
+
+
 
 
   // Manejar eliminación de archivos
@@ -708,6 +978,12 @@ if (isset($_POST['addFile']) && $_POST['addFile'] === 'true') {
 					isAdmin=$isAdmin where user_id=$id";
 
 				$result = mysqli_query($conn, $query);
+
+                // Historial
+                $historyName= returnPersonName($data['history']['person_id']);
+                $texto = returnPersonName($data['history']['person_id'])." ha editado un usuario";
+                $historyResponse = addToHistory($data['history']['user'], $texto);
+                //Fin Historial
 
 				if (!$result) {
 					throw new Exception("Error en la consulta SQL: " . mysqli_error($conn));
@@ -819,6 +1095,11 @@ if (isset($_POST['addFile']) && $_POST['addFile'] === 'true') {
                 }
                 $message = 'Usuario añadido con éxito...';
                 $icon = 'success';
+                // Historial
+                $historyName= returnPersonName($data['history']['person_id']);
+                $texto = returnPersonName($data['history']['person_id'])." ha creado un usuario";
+                $historyResponse = addToHistory($data['history']['user'], $texto);
+                //Fin Historial
             } else {
                 $message = 'Error: Este usuario ya existe';
                 $icon = 'error';
@@ -870,6 +1151,13 @@ if (isset($_POST['addFile']) && $_POST['addFile'] === 'true') {
 
                     $query = "INSERT INTO exams (unit_id,title,description,total_score) VALUES ('$unit_id','$title','$description',$total_score)";
                     $result = mysqli_query($conn, $query);
+                    
+                    
+                    // Historial
+                    $historyName= returnPersonName($data['history']['person_id']);
+                    $texto = returnPersonName($data['history']['person_id'])." ha creado un examen";
+                    $historyResponse = addToHistory($data['history']['user'], $texto);
+                    //Fin Historial
     
                     if (!$result) {
                         throw new Exception("Error en la consulta SQL: " . mysqli_error($conn));
@@ -901,6 +1189,13 @@ if (isset($_POST['addFile']) && $_POST['addFile'] === 'true') {
     
                     $query = "UPDATE exams SET unit_id=$unit_id,title='$title',description='$description',total_score=$total_score WHERE id=$id";
                     $result = mysqli_query($conn, $query);
+
+                    
+                    // Historial
+                    $historyName= returnPersonName($data['history']['person_id']);
+                    $texto = returnPersonName($data['history']['person_id'])." ha editado un examen";
+                    $historyResponse = addToHistory($data['history']['user'], $texto);
+                    //Fin Historial
     
                     if (!$result) {
                         throw new Exception("Error en la consulta SQL: " . mysqli_error($conn));
@@ -939,6 +1234,37 @@ if (isset($_POST['addFile']) && $_POST['addFile'] === 'true') {
                 $response = array('message' => $message,'icon'=>$icon);
                 echo json_encode($response);
         }
+
+
+
+        if (isset($data['addMark'])) {
+
+            $message = '';
+            $icon = '';
+    
+                // Escapa los valores para evitar inyección de SQL
+                $score = mysqli_real_escape_string($conn, strtolower($data['score']));
+                $exam_id =  mysqli_real_escape_string($conn, strtolower($data['exam_id']));
+                $user_id =  mysqli_real_escape_string($conn, strtolower($data['user_id']));
+    
+                if (ifMarkExists($user_id,$exam_id) == true) {
+
+                    $message ='Cuidado: Esta lección ya tiene un numero asignado ';
+                    $icon = 'warning';	
+
+                } else{
+                    $query = "INSERT INTO exam_scores (score,exam_id,user_id) VALUES ($score,$exam_id,$user_id)";
+                    $result = mysqli_query($conn, $query);
+    
+                    if (!$result) {
+                        throw new Exception("Error en la consulta SQL: " . mysqli_error($conn));
+                        $message = 'Error';
+                    }
+                }
+
+                $response = array('message' => $message,'icon'=>$icon);
+                echo json_encode($response);
+            }
 
 
 
@@ -1081,7 +1407,7 @@ if ($method == "GET") {
 if (isset($_GET['this_lessons_list'])) {
     $unit_id = $_GET['id'];
     $obj = array();
-    $consulta = "SELECT * FROM lessons WHERE unit_id = $unit_id ORDER BY lesson_order ASC";
+    $consulta = "SELECT * FROM lessons WHERE unit_id = $unit_id AND isDeleted=0 ORDER BY lesson_order ASC";
     $resultado = mysqli_query($conn, $consulta);
     if (!$resultado) {
         die('Error en la consulta: ' . mysqli_error($conn));
@@ -1156,7 +1482,7 @@ if (isset($_GET['this_specific_lesson_list'])) {
     $unit_id = $_GET['id'];
     $lesson_order = $_GET['lesson_order'];
     $obj = array();
-    $consulta = "SELECT * FROM lessons WHERE unit_id = $unit_id AND lesson_order = $lesson_order";
+    $consulta = "SELECT * FROM lessons WHERE unit_id = $unit_id AND lesson_order = $lesson_order AND isDeleted=0";
     $resultado = mysqli_query($conn, $consulta);
     if (!$resultado) {
         die('Error en la consulta: ' . mysqli_error($conn));
@@ -1198,6 +1524,29 @@ if (isset($_GET['this_lessons_files'])) {
         echo 'Error en la codificación JSON: ' . json_last_error_msg();
     }
 }
+
+
+if (isset($_GET['this_lessons_videos'])) {
+    $lesson_id = $_GET['id'];
+    $obj = array();
+    $consulta = "SELECT * FROM videos WHERE lesson_id = $lesson_id";
+    $resultado = mysqli_query($conn, $consulta);
+    if (!$resultado) {
+        die('Error en la consulta: ' . mysqli_error($conn));
+    }
+    while ($row = mysqli_fetch_assoc($resultado)) {
+        $obj[] = array(
+            'id' => $row['id'],
+            'name'=> $row['name'],
+        );
+    }
+    echo json_encode($obj); // Devuelve los datos en formato JSON
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        echo 'Error en la codificación JSON: ' . json_last_error_msg();
+    }
+}
+
+
 
 if(isset($_GET['user_list'])){
     $obj = array();
@@ -1284,7 +1633,7 @@ if (isset($_GET['units_and_lessons_list'])) {
             );
 
             $unit_id = $rowUnidad['id'];
-            $consultaLecciones = "SELECT * FROM lessons WHERE unit_id = $unit_id ORDER BY lesson_order ASC";
+            $consultaLecciones = "SELECT * FROM lessons WHERE unit_id = $unit_id AND isDeleted=0 ORDER BY lesson_order ASC";
             $resultadoLecciones = mysqli_query($conn, $consultaLecciones);
             if ($resultadoLecciones && mysqli_num_rows($resultadoLecciones) > 0) {
                 while ($rowLeccion = mysqli_fetch_assoc($resultadoLecciones)) {
@@ -1315,7 +1664,7 @@ if (isset($_GET['units_and_lessons_list'])) {
     if (isset($_GET['dashboard_cards'])) {
         // Consultas SQL
         $consulta_user = "SELECT COUNT(*) AS total_entries FROM user";
-        $consulta_lessons = "SELECT COUNT(*) AS total_entries FROM lessons";
+        $consulta_lessons = "SELECT COUNT(*) AS total_entries FROM lessons WHERE isDeleted=0";
         $consulta_units = "SELECT COUNT(*) AS total_entries FROM units";
         $consulta_exams = "SELECT COUNT(*) AS total_entries FROM exams";
     
@@ -1329,6 +1678,88 @@ if (isset($_GET['units_and_lessons_list'])) {
     
         echo json_encode($obj);
     }
+
+    if (isset($_GET['mark_list'])) {
+        $user_id = $_GET['user_id'];
+        $obj = array();
+        $consulta = "SELECT * FROM exam_scores WHERE user_id=$user_id";
+        $resultado = mysqli_query($conn, $consulta);
+        
+        if ($resultado && mysqli_num_rows($resultado) > 0) {
+            $obj = array(); // Inicializar $obj como un array vacío
+    
+            while ($row = mysqli_fetch_assoc($resultado)) {
+                $exam_unit = returnExamUnit($row['exam_id']);
+                $unit_name = returnUnitName($exam_unit); // Obtener el nombre de la unidad
+                $unit_order = returnUnitOrder($exam_unit);
+    
+                $obj[] = array( // Agregar los datos al array $obj
+                    'unit_name' => $unit_name,
+                    'unit_order' => $unit_order,  // Concatenar el nombre y el orden de la unidad
+                    'exam' => returnSingleExam($row['exam_id']), // Quitar la coma adicional
+                    'score' => $row['score']
+                );
+            }
+        }
+    
+        echo json_encode($obj);
+    }
+
+
+
+    
+
+if(isset($_GET['history_data'])){
+    $obj = array();
+    $consulta = "SELECT * FROM user_history";
+    $resultado = mysqli_query($conn, $consulta);
+    if ($resultado && mysqli_num_rows($resultado) > 0) {
+        while($row = mysqli_fetch_assoc($resultado)) {      
+            $obj[]=array('action'=>$row['action'],'date'=>$row['date']);
+        }   
+    }
+    echo json_encode($obj); 
+}
+    
+    
+if(isset($_GET['getUsersByMonth'])){
+    $obj = array();
+    $consulta = "SELECT DATE_FORMAT(date, '%Y-%m') AS month, DATE_FORMAT(date, '%M') AS month_name, COUNT(*) AS user_count FROM user GROUP BY month ORDER BY month";
+    $resultado = mysqli_query($conn, $consulta);
+
+    if (!$resultado) {
+        die("Error en la consulta SQL: " . mysqli_error($conn));
+    }
+
+    $englishToSpanishMonths = array(
+        'January' => 'Enero',
+        'February' => 'Febrero',
+        'March' => 'Marzo',
+        'April' => 'Abril',
+        'May' => 'Mayo',
+        'June' => 'Junio',
+        'July' => 'Julio',
+        'August' => 'Agosto',
+        'September' => 'Septiembre',
+        'October' => 'Octubre',
+        'November' => 'Noviembre',
+        'December' => 'Diciembre'
+    );
+
+    while ($row = mysqli_fetch_assoc($resultado)) {
+        $month_name_es = $englishToSpanishMonths[$row['month_name']]; // Traduce el nombre del mes al español
+
+        $obj[] = array(
+            'month' => $row['month'],
+            'month_name' => $month_name_es,
+            'user_count' => $row['user_count']
+        );
+    }
+
+    echo json_encode($obj); 
+}
+
+
 
 
 }
