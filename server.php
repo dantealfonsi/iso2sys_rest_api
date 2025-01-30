@@ -132,12 +132,39 @@ function returnDatPerson($id) {
 }
 
 
+function returnDatPersonByUser($user_id) {
+
+    $person_id = returnPersonIdByUser($user_id);
+
+	$obj = array();
+    $resultado = mysqli_query($GLOBALS['conn'], "SELECT * FROM person WHERE id = $person_id");
+    if ($resultado && mysqli_num_rows($resultado) > 0) {
+        $row = mysqli_fetch_assoc($resultado);
+		$obj = array(
+			'id'=>$row['id'],
+			'cedula' => $row['cedula'],
+			'name' => $row['name'],
+			'last_name'	=> $row['last_name'],
+		);
+    }
+	return $obj;	
+}
+
+
 function returnPersonName($person_id) {
     $resultado = mysqli_query($GLOBALS['conn'], "SELECT name FROM person WHERE id = $person_id");
     $row = mysqli_fetch_assoc($resultado);
     
     return $row['name']; // Devuelve solo el valor del nombre
 }
+
+function returnPersonIdByUser($user_id) {
+    $resultado = mysqli_query($GLOBALS['conn'], "SELECT person_id FROM user WHERE user_id = $user_id");
+    $row = mysqli_fetch_assoc($resultado);
+    
+    return $row['person_id']; // Devuelve solo el valor del nombre
+}
+
 
 
 
@@ -278,6 +305,8 @@ function returnExistingFiles($lesson_id)
     }
     return $obj;
 }
+
+
 
 function addToHistory($user_id, $action) {
     global $conn; // Necesario para acceder a la variable $conn
@@ -1267,6 +1296,35 @@ if (isset($_POST['addVideo']) && $_POST['addVideo'] === 'true') {
             }
 
 
+        if (isset($data['addViewedVideo'])) {
+
+            $message = '';
+            $icon = '';
+    
+            // Escapa los valores para evitar inyección de SQL
+            $lesson =  mysqli_real_escape_string($conn, strtolower($data['lesson']));
+            $userId =  mysqli_real_escape_string($conn, strtolower($data['user']));
+            $progressPercentage =  mysqli_real_escape_string($conn, strtolower($data['progressPercentage']));
+
+            // ...otros campos    
+    
+            $query = "INSERT INTO watched_videos (lesson_id,user_id,watched) VALUES ('$lesson','$userId',1)";
+            $result = mysqli_query($conn, $query);
+                                
+
+                if (!$result) {
+                    throw new Exception("Error en la consulta SQL: " . mysqli_error($conn));
+                    $message = 'Error';
+                }
+
+            $message ='Examen Añadido con Exito';
+            $icon = 'success';
+    
+            $response = array('message' => $message,'icon'=>$icon);
+            echo json_encode($response);
+        }
+
+
 
 
 }
@@ -1403,6 +1461,26 @@ if ($method == "GET") {
 			echo 'Error en la codificación JSON: ' . json_last_error_msg();
 		}
 	}
+
+    if(isset($_GET['view_videos'])){
+        $user_id = $_GET['user_id'];
+        $results = array();
+        $consulta = "SELECT * FROM watched_videos WHERE user_id=$user_id";
+        $resultado = mysqli_query($conn, $consulta);
+        while($row = mysqli_fetch_assoc($resultado)) {
+          $results[] = array( // Agrega cada fila al array $results
+            'id' => $row['id'],
+            'lesson_id' => $row['lesson_id'],
+          );
+        }
+        echo json_encode($results); 
+        // Agrega esto para depurar
+        if (json_last_error() !== JSON_ERROR_NONE) {
+          echo 'Error en la codificación JSON: ' . json_last_error_msg();
+        }
+      }
+      
+
 
 if (isset($_GET['this_lessons_list'])) {
     $unit_id = $_GET['id'];
@@ -1706,7 +1784,32 @@ if (isset($_GET['units_and_lessons_list'])) {
     }
 
 
-
+    if (isset($_GET['exam_mark_list'])) {
+        $exam_id = $_GET['id'];
+        $obj = array();
+        $consulta = "SELECT * FROM exam_scores WHERE exam_id=$exam_id";
+        $resultado = mysqli_query($conn, $consulta);
+        
+        if ($resultado && mysqli_num_rows($resultado) > 0) {
+            $obj = array(); // Inicializar $obj como un array vacío
+    
+            while ($row = mysqli_fetch_assoc($resultado)) {
+                $exam_unit = returnExamUnit($row['exam_id']);
+                $unit_name = returnUnitName($exam_unit); // Obtener el nombre de la unidad
+                $unit_order = returnUnitOrder($exam_unit);
+    
+                $obj[] = array( // Agregar los datos al array $obj
+                    'unit_name' => $unit_name,
+                    'unit_order' => $unit_order,  // Concatenar el nombre y el orden de la unidad
+                    'exam' => returnSingleExam($row['exam_id']), // Quitar la coma adicional
+                    'person' => returnDatPersonByUser($row['user_id']), // Quitar la coma adicional
+                    'score' => $row['score']
+                );
+            }
+        }
+    
+        echo json_encode($obj);
+    }
     
 
 if(isset($_GET['history_data'])){
