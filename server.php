@@ -1741,10 +1741,10 @@ if (isset($_GET['units_and_lessons_list'])) {
 
     if (isset($_GET['dashboard_cards'])) {
         // Consultas SQL
-        $consulta_user = "SELECT COUNT(*) AS total_entries FROM user";
-        $consulta_lessons = "SELECT COUNT(*) AS total_entries FROM lessons WHERE isDeleted=0";
-        $consulta_units = "SELECT COUNT(*) AS total_entries FROM units";
-        $consulta_exams = "SELECT COUNT(*) AS total_entries FROM exams";
+        $consulta_user = "SELECT COUNT(*) AS total_entries FROM user WHERE isDeleted=0";
+        $consulta_lessons = "SELECT COUNT(*) AS total_entries FROM lessons l JOIN units u ON l.unit_id = u.id WHERE l.isDeleted = 0 AND u.isDeleted = 0;";
+        $consulta_units = "SELECT COUNT(*) AS total_entries FROM units WHERE isDeleted=0";
+        $consulta_exams = "SELECT COUNT(*) AS total_entries FROM exams WHERE isDeleted=0";
     
         // Objeto de resultados
         $obj = array(
